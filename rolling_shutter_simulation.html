@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>ローリングシャッター検証</title>
+	</head>
+	<body>
+		<script src="./three.js"></script>
+		<script>
+			function main(){
+				// ref: https://threejs.org/docs/index.html#manual/en/introduction/Creating-a-scene
+
+				// canvas size
+				var width = 400;
+				var height = 300;
+
+				// カメラパラメーター
+				var fov = document.getElementById("fov").value; // 垂直画角
+				var pan = document.getElementById("pan").value; // 左右のカメラ方向（0が真横）
+				var tilt = document.getElementById("tilt").value; // 上下のカメラ方向（0が水平）
+				var t0 = document.getElementById("timing").value; // 撮影開始タイミング
+				var xlim = 50; // カメラの動作範囲
+				var delta = document.getElementById("speed").value/30.0; //1フレームあたりの移動距離
+
+				// 物体パラメーター
+				var radius = 1; // 円柱の半径
+				var objheight = 20; // 円柱の高さ
+				var distance = document.getElementById("distance").value; // 円柱までの距離
+
+				// three.js準備
+				var scene = new THREE.Scene();
+				var scene_canvas = document.getElementById("scene");
+				var renderer = new THREE.WebGLRenderer({ canvas: scene_canvas });
+
+				// 物体
+				var geometry = new THREE.CylinderGeometry( radius, radius, objheight, 32 );
+				var material = new THREE.MeshBasicMaterial( { color: 0xdddddd } );
+				var pole= new THREE.Mesh( geometry, material );
+				scene.add(pole);
+
+				// カメラ
+				var camera = new THREE.PerspectiveCamera( fov, width/(1.0*height), 0.1, 1000 );
+				camera.rotation.y = THREE.Math.degToRad(pan);
+				camera.rotation.x = -THREE.Math.degToRad(tilt);
+				camera.position.x = -xlim;
+				camera.position.z = distance;
+
+				// ローリングシャッターのシミュレーション用
+				var raw = new Uint8Array( width*height*4 );
+				var output = new Uint8ClampedArray( width*height*4 );
+				var photo_canvas = document.getElementById("photo");
+				var output_context = photo_canvas.getContext("2d");
+
+				// ループ
+				var counter = 0;
+				var animate = function () {
+					requestAnimationFrame( animate );
+					
+					camera.position.x += delta;
+					// if(camera.position.x > xlim){
+					// 	camera.position.x = -xlim;
+					// }
+
+					renderer.render( scene, camera );
+
+					// 描画したピクセルを取得
+					// ref: http://memeplex.blog.shinobi.jp/webgl/three.js%E3%81%A73d%E7%94%BB%E5%83%8F%E3%81%AE%E3%83%94%E3%82%AF%E3%82%BB%E3%83%AB%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92cpu%E3%81%A7%E8%A8%88%E7%AE%97%E3%81%99%E3%82%8B%E6%96%B9%E6%B3%95
+					renderer.getContext().readPixels(
+						0,
+						0,
+						width,
+						height,
+						WebGLRenderingContext.RGBA,
+						WebGLRenderingContext.UNSIGNED_BYTE,
+						raw
+						);
+
+					// 1行ずつコピー
+					// （ローリングシャッターをシミュレーション）
+					var idx = counter - t0*width;
+					if(0<=idx && idx<width*height){
+						var end = idx + width;
+						for(; idx<end; idx++){
+							output[4*idx  ] = raw[4*idx  ];
+							output[4*idx+1] = raw[4*idx+1];
+							output[4*idx+2] = raw[4*idx+2];
+							output[4*idx+3] = raw[4*idx+3];
+						}
+					}
+					counter += width;
+					if(idx>=width*height){
+						return;
+					}
+
+					// 出力画像を表示
+					var imgdata = new ImageData(output, width, height);
+					output_context.putImageData(imgdata, 0, 0);
+
+				};
+
+				animate();
+			};
+		</script>
+		垂直画角　　　：<input id="fov" type="number" value=80><br>
+		カメラ左右　　：<input id="pan" type="number" value=-10><br>
+		カメラ上下　　：<input id="tilt" type="number" value=0><br>
+		撮影タイミング：<input id="timing" type="number" value=180><br>
+		速度　　　　　：<input id="speed" type="number" value=5><br>
+		対象までの距離：<input id="distance" type="number" value=15><br>		
+		<button onclick="main();">スタート</button>
+		<hr>
+		シーン<br>
+		<canvas id="scene" width=400 height=300></canvas>
+		<hr>
+		撮影画像<br>
+		<canvas id="photo" width=400 height=300></canvas>
+	</body>
+</html>
